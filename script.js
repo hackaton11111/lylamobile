@@ -64,6 +64,7 @@ function showPage(page) {
     if (page==="reservation") renderReservation();
     if (page==="status") renderStatus();
     if (page==="subscriptions") renderSubscriptions();
+    if (page==="reviews") renderReviews();
     if (page==="admin") renderAdmin();
     window.scrollTo(0,0);
 }
@@ -71,7 +72,7 @@ function showPage(page) {
 function renderNav() {
     const items = [
         {id:"home",label:"Accueil"},{id:"vehicles",label:"Véhicules"},{id:"reservation",label:"Réservation"},
-        {id:"status",label:"Mes réservations"},{id:"subscriptions",label:"Abonnements"}
+        {id:"status",label:"Mes réservations"},{id:"subscriptions",label:"Abonnements"},{id:"reviews",label:"Avis clients"}
     ];
     if (currentUser && currentUser.role==="admin") items.push({id:"admin",label:"Admin"});
 
@@ -430,7 +431,125 @@ function updateResStatus(id, status) {
     if (r) { r.status=status; renderAdmin(); }
 }
 
+let reviews = [
+    {id:1,userId:null,userName:"Marie D.",vehicleName:"Renault Clio V",rating:5,comment:"Service impeccable ! Véhicule propre et en parfait état. Je recommande vivement LylaMobility pour la location de voiture.",date:"2026-01-15"},
+    {id:2,userId:null,userName:"Thomas L.",vehicleName:"Peugeot Boxer",rating:4,comment:"Très bon rapport qualité-prix pour l'utilitaire. Parfait pour mon déménagement. Seul petit bémol : un léger retard à la livraison.",date:"2026-01-22"},
+    {id:3,userId:null,userName:"Sophie M.",vehicleName:"Mercedes Sprinter Minibus",rating:5,comment:"Nous avons loué le minibus pour un mariage. Tout était parfait, le véhicule était spacieux et confortable. Merci !",date:"2026-02-03"},
+    {id:4,userId:null,userName:"Jean-Pierre R.",vehicleName:"Citroën C3",rating:4,comment:"Bonne petite voiture pour les trajets quotidiens. L'équipe est réactive et professionnelle.",date:"2026-02-10"},
+    {id:5,userId:null,userName:"Camille B.",vehicleName:"Iveco Daily Bus",rating:5,comment:"Organisation d'une sortie scolaire avec le bus : tout s'est déroulé sans accroc. Le bus était nickel et le prix très raisonnable.",date:"2026-02-18"},
+];
 
+function renderReviews() {
+    const avgRating = reviews.length > 0 ? (reviews.reduce((a,r) => a + r.rating, 0) / reviews.length).toFixed(1) : "0";
+    const starCounts = [5,4,3,2,1].map(s => ({stars:s, count:reviews.filter(r=>r.rating===s).length}));
+
+    let html = `
+    <div class="reviews-summary">
+      <div class="reviews-avg">
+        <div class="reviews-avg-number">${avgRating}</div>
+        <div class="reviews-avg-stars">${renderStars(Math.round(parseFloat(avgRating)))}</div>
+        <div class="reviews-avg-count">${reviews.length} avis</div>
+      </div>
+      <div class="reviews-bars">
+        ${starCounts.map(s => `
+          <div class="reviews-bar-row">
+            <span class="reviews-bar-label">${s.stars} ★</span>
+            <div class="reviews-bar-track"><div class="reviews-bar-fill" style="width:${reviews.length>0?(s.count/reviews.length*100):0}%"></div></div>
+            <span class="reviews-bar-count">${s.count}</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>`;
+
+    if (currentUser) {
+        html += `
+    <div class="review-form-card">
+      <h3 style="font-size:18px;font-weight:600;margin-bottom:16px">Laisser un avis</h3>
+      <div class="form-group">
+        <label class="form-label">Véhicule loué</label>
+        <select class="input-field" id="reviewVehicle">
+          <option value="">— Sélectionnez un véhicule —</option>
+          ${VEHICLES.map(v=>`<option value="${v.brand} ${v.model}">${v.brand} ${v.model}</option>`).join("")}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note</label>
+        <div class="star-selector" id="starSelector">
+          ${[1,2,3,4,5].map(i=>`<span class="star-btn" data-rating="${i}" onclick="selectRating(${i})">☆</span>`).join("")}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Votre commentaire</label>
+        <textarea class="input-field" id="reviewComment" rows="4" placeholder="Partagez votre expérience avec LylaMobility..."></textarea>
+      </div>
+      <button class="btn-primary" style="width:100%;padding:14px" onclick="submitReview()">Publier mon avis</button>
+    </div>`;
+    } else {
+        html += `
+    <div class="review-form-card" style="text-align:center;padding:40px">
+      <p style="color:var(--muted);margin-bottom:16px">Connectez-vous pour laisser un avis</p>
+      <button class="btn-primary" onclick="openAuth('login')">Se connecter / S'inscrire</button>
+    </div>`;
+    }
+
+    html += `<div class="reviews-list">`;
+    reviews.slice().reverse().forEach((r,i) => {
+        html += `
+      <div class="card review-card" style="animation:fadeIn 0.4s ease ${i*0.06}s both">
+        <div class="review-header">
+          <div class="review-avatar">${r.userName.charAt(0)}</div>
+          <div>
+            <div class="review-author">${r.userName}</div>
+            <div class="review-meta">${r.vehicleName} · ${r.date}</div>
+          </div>
+          <div class="review-stars">${renderStars(r.rating)}</div>
+        </div>
+        <p class="review-text">${r.comment}</p>
+      </div>`;
+    });
+    html += `</div>`;
+
+    $("reviewsContent").innerHTML = html;
+}
+
+let selectedRating = 0;
+
+function selectRating(rating) {
+    selectedRating = rating;
+    document.querySelectorAll(".star-btn").forEach(btn => {
+        const r = parseInt(btn.dataset.rating);
+        btn.textContent = r <= rating ? "★" : "☆";
+        btn.classList.toggle("active", r <= rating);
+    });
+}
+
+function renderStars(rating) {
+    return Array.from({length:5}, (_,i) =>
+        `<span style="color:${i < rating ? 'var(--accent)' : 'var(--border)'};font-size:18px">${i < rating ? '★' : '☆'}</span>`
+    ).join("");
+}
+
+function submitReview() {
+    const vehicle = $("reviewVehicle").value;
+    const comment = $("reviewComment").value.trim();
+    if (!vehicle) { notify("Veuillez sélectionner un véhicule.", "error"); return; }
+    if (selectedRating === 0) { notify("Veuillez attribuer une note.", "error"); return; }
+    if (!comment) { notify("Veuillez écrire un commentaire.", "error"); return; }
+
+    reviews.push({
+        id: Date.now(),
+        userId: currentUser.id,
+        userName: currentUser.name,
+        vehicleName: vehicle,
+        rating: selectedRating,
+        comment: comment,
+        date: new Date().toISOString().split("T")[0]
+    });
+
+    selectedRating = 0;
+    notify("Merci pour votre avis !");
+    renderReviews();
+}
 
 function authPromptHTML(text) {
     return `<div class="auth-prompt">
